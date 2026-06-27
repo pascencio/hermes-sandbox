@@ -1,0 +1,24 @@
+#!/usr/bin/with-contenv bash
+# Servicio s6-overlay: corre el Hermes gateway (profile default) en foreground,
+# supervisado por el s6 de linuxserver. Auto-restart en crash, arranca en boot,
+# independiente de cualquier terminal XFCE.
+
+export HOME=/config
+HERMES=/config/.hermes/hermes-agent/venv/bin/hermes
+
+# Esperar a que Hermes esté instalado y CONFIGURADO antes de arrancar.
+# Evita crash-loop en el primer boot (setup aún no corrido).
+#  - .setup-done: lo crea autostart-hermes.sh al terminar el wizard
+#  - TELEGRAM_BOT_TOKEN activo (no comentado) en .env
+while [ ! -x "$HERMES" ] \
+   || [ ! -f "$HOME/.hermes/.setup-done" ] \
+   || ! grep -qE '^[[:space:]]*TELEGRAM_BOT_TOKEN=.+' "$HOME/.hermes/.env" 2>/dev/null; do
+    echo "[hermes-gateway] esperando setup (instalación + .setup-done + TELEGRAM_BOT_TOKEN)..."
+    sleep 5
+done
+
+echo "[hermes-gateway] setup listo — arrancando gateway"
+cd "$HOME"
+exec s6-setuidgid abc \
+    env HOME=/config HERMES_GATEWAY_NO_SUPERVISE=1 \
+    "$HERMES" gateway run --no-supervise

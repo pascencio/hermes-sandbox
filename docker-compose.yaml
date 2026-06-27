@@ -1,0 +1,32 @@
+services:
+  webtop:
+    build: .
+    container_name: hermes-webtop
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+      - TITLE=${TITLE}
+      - CUSTOM_USER=${CUSTOM_USER}
+      - PASSWORD=${PASSWORD}
+      # Webtop usa s6-overlay (s6 = PID 1) pero NO es la imagen s6 oficial de
+      # Hermes, así que la supervisión s6 de Hermes falla con
+      # "no such gateway 'default'". Forzamos modo foreground (pre-s6).
+      - HERMES_GATEWAY_NO_SUPERVISE=1
+      # Provisioning desatendido (lo aplica init-hermes-provision en el 1er boot)
+      - HERMES_MODEL=${HERMES_MODEL}
+      - HERMES_PROVIDER=${HERMES_PROVIDER}
+      - HERMES_CONTEXT_LENGTH=${HERMES_CONTEXT_LENGTH}
+      - LM_BASE_URL=${LM_BASE_URL}
+      - LM_API_KEY=${LM_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS}
+    volumes:
+      - ./config:/config
+    ports:
+      - "3300:3000"
+      - "3301:3001"
+    shm_size: "2gb"
+    restart: unless-stopped
