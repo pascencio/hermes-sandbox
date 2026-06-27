@@ -18,7 +18,7 @@ Hermes vive en `/config/.hermes/` y persiste vía el bind mount `./config:/confi
 ## Prerrequisitos
 
 - Docker + Docker Compose
-- Un servidor de inferencia accesible desde el contenedor (este sandbox asume [LM Studio](https://lmstudio.ai/) en la red local, p. ej. `http://192.168.1.18:1234/v1`). El modelo debe servir **≥ 64K de contexto** (mínimo que exige Hermes).
+- Un servidor de inferencia accesible desde el contenedor (este sandbox asume [LM Studio](https://lmstudio.ai/) en la red local, p. ej. `http://127.0.0.1:1234/v1`). El modelo debe servir **≥ 64K de contexto** (mínimo que exige Hermes).
 - Un bot de Telegram ([@BotFather](https://t.me/BotFather)) si usas el gateway de Telegram.
 
 ## Configuración
@@ -36,7 +36,7 @@ PASSWORD=tu_password
 HERMES_MODEL=google/gemma-4-e4b
 HERMES_PROVIDER=lmstudio
 HERMES_CONTEXT_LENGTH=65536
-LM_BASE_URL=http://192.168.1.18:1234/v1      # DEBE incluir /v1
+LM_BASE_URL=http://127.0.0.1:1234/v1      # DEBE incluir /v1
 LM_API_KEY=lm-studio                          # LM Studio acepta cualquier valor
 TELEGRAM_BOT_TOKEN=123456:ABC...              # de @BotFather
 TELEGRAM_ALLOWED_USERS=                       # IDs separados por coma (opcional)
