@@ -72,6 +72,7 @@ HERMES_ENV__LM_API_KEY=lm-studio                  # LM Studio acepta cualquier v
 # Gateway Telegram (opcional)
 HERMES_ENV__TELEGRAM_BOT_TOKEN=123456:ABC...      # de @BotFather
 HERMES_ENV__TELEGRAM_ALLOWED_USERS=               # IDs separados por coma
+HERMES_ENV__TELEGRAM_HOME_CHANNEL=                # recomendado; si hay un solo allowed user, se infiere
 
 # Computer use (cua-driver) — control del escritorio. 1=on, 0=off
 HERMES_COMPUTER_USE=1
@@ -123,6 +124,20 @@ docker logs hermes-webtop                   # ver logs
 ```
 
 El binario de Hermes (no está en el `PATH` por defecto): `/config/.hermes/hermes-agent/venv/bin/hermes`.
+
+### Telegram: home channel
+
+El mensaje `Type /sethome to make this chat your home channel, or ignore to skip.`
+no es un error: Hermes lo muestra cuando Telegram ya está conectado pero aún no
+tiene un chat home configurado. El home channel no es necesario para responder
+mensajes entrantes, pero sí para un flujo desatendido completo: cron, handoffs,
+notificaciones de reinicio y envíos iniciados desde CLI.
+
+Si `HERMES_ENV__TELEGRAM_ALLOWED_USERS` contiene un único ID y
+`HERMES_ENV__TELEGRAM_HOME_CHANNEL` está vacío, el provisioning usa ese ID como
+home automáticamente. Si tienes varios usuarios permitidos, define
+`HERMES_ENV__TELEGRAM_HOME_CHANNEL=<chat_id>` o envía `/sethome` una vez desde el
+chat privado o grupo que quieras usar como principal.
 
 ## Notas de diseño (gotchas)
 

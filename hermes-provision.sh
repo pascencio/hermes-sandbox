@@ -72,6 +72,30 @@ while IFS= read -r var; do
     esac
 done < <(compgen -e)
 
+# 5b) Telegram home channel: Telegram puede responder mensajes entrantes sin
+#     home channel, pero para un setup desatendido completo (cron, handoff,
+#     notificaciones y envíos iniciados desde CLI) conviene dejarlo definido.
+#     Si el usuario configuró exactamente un allowed user y omitió el home,
+#     inferimos ese chat como home de forma segura.
+if grep -qE '^[[:space:]]*TELEGRAM_BOT_TOKEN=.+' "$ENVFILE" 2>/dev/null \
+   && ! grep -qE '^[[:space:]]*TELEGRAM_HOME_CHANNEL=.+' "$ENVFILE" 2>/dev/null; then
+    telegram_allowed="$(
+        grep -E '^[[:space:]]*TELEGRAM_ALLOWED_USERS=' "$ENVFILE" 2>/dev/null \
+            | tail -n 1 \
+            | cut -d= -f2- \
+            | tr -d '[:space:]'
+    )"
+    if [ -n "$telegram_allowed" ] && [[ "$telegram_allowed" != *,* ]]; then
+        echo "[provision] TELEGRAM_HOME_CHANNEL no definido; usando único TELEGRAM_ALLOWED_USERS"
+        run_as_abc sed -i "/^[[:space:]]*#\?[[:space:]]*TELEGRAM_HOME_CHANNEL=/d" "$ENVFILE" 2>/dev/null || true
+        printf '%s\n' "TELEGRAM_HOME_CHANNEL=${telegram_allowed}" | run_as_abc tee -a "$ENVFILE" >/dev/null
+    elif [ -z "$telegram_allowed" ]; then
+        echo "[provision] aviso: Telegram no tiene TELEGRAM_HOME_CHANNEL; envía /sethome desde el chat principal"
+    else
+        echo "[provision] aviso: Telegram tiene múltiples allowed users; define TELEGRAM_HOME_CHANNEL o envía /sethome"
+    fi
+fi
+
 # 6) Computer use (opcional, gratuito): instala cua-driver (trycua/cua) vía MCP.
 #    Telemetría off. No bloquea el provisioning si falla (reintenta próximo boot).
 if [ "${HERMES_COMPUTER_USE:-0}" = "1" ]; then
