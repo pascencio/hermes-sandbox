@@ -4,12 +4,14 @@ Entorno Docker reproducible para correr el **[Hermes Agent](https://hermes-agent
 
 El setup completo (instalación de Hermes, modelo, credenciales y arranque del gateway de mensajería) es **desatendido**: en el primer boot el contenedor se autoconfigura desde variables de entorno, sin asistentes interactivos.
 
+No fuerza una configuración fija: instala Hermes, deja su `config.yaml` plantilla por defecto, y aplica **solo** los overrides que pases por env vars (convención genérica `HERMES_CFG__*` / `HERMES_ENV__*`). Es **agnóstico de provider** — sirve igual con un modelo local gratis (LM Studio, Ollama) o con un provider de pago (Claude, OpenAI, MiniMax). Nunca exige login con Nous.
+
 ## Arquitectura
 
 | Componente | Rol |
 |---|---|
 | `linuxserver/webtop:debian-xfce` | Imagen base: escritorio XFCE servido por web (s6-overlay v3 como PID 1) |
-| `init-hermes-provision` (oneshot s6) | Primer boot: instala Hermes y aplica modelo + secretos desde env vars. Idempotente vía sentinela `.setup-done` |
+| `init-hermes-provision` (oneshot s6) | Primer boot: instala Hermes y aplica config + credenciales (`HERMES_CFG__*` / `HERMES_ENV__*`) desde env vars. Idempotente vía sentinela `.setup-done` |
 | `svc-hermes-gateway` (longrun s6) | Corre el gateway de mensajería en foreground, supervisado por s6 (auto-restart, arranca en boot). Depende del oneshot |
 | `autostart-hermes.sh` | Solo diagnóstico: abre una terminal si el provisioning no completó |
 
@@ -18,12 +20,39 @@ Hermes vive en `/config/.hermes/` y persiste vía el bind mount `./config:/confi
 ## Prerrequisitos
 
 - Docker + Docker Compose
-- Un servidor de inferencia accesible desde el contenedor (este sandbox asume [LM Studio](https://lmstudio.ai/) en la red local, p. ej. `http://127.0.0.1:1234/v1`). El modelo debe servir **≥ 64K de contexto** (mínimo que exige Hermes).
+- Acceso a un provider de modelo (elige uno en `.env`): local gratis ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.com/)) o de pago con tu API key (Claude, OpenAI, MiniMax). El modelo debe servir **≥ 64K de contexto** (mínimo que exige Hermes).
 - Un bot de Telegram ([@BotFather](https://t.me/BotFather)) si usas el gateway de Telegram.
 
 ## Configuración
 
-Toda la configuración vive en `.env` (no se versiona — `.gitignore` cubre `.env*`):
+Toda la configuración vive en `.env` (no se versiona — `.gitignore` cubre `.env*`; hay un `.env.example` de referencia). El compose pasa **todo** `.env` al contenedor (`env_file`), así que agregas o quitas claves sin tocar `docker-compose.yaml`.
+
+Dos convenciones genéricas, ambas opcionales — lo que no definas queda en el default de Hermes:
+
+| Prefijo | Efecto | Regla de nombre |
+|---|---|---|
+| `HERMES_CFG__<sec>__<clave>` | `hermes config set <sec>.<clave> <valor>` (edita `config.yaml`) | `__` = `.` ; `_` simple se conserva |
+| `HERMES_ENV__<CLAVE>` | escribe `CLAVE=<valor>` en el `.env` de Hermes (secretos/URLs) | tal cual |
+
+`model.context_length` ilustra la regla de nombres: `HERMES_CFG__model__context_length` → `model.context_length` (el `__` es `.`, no `model.context.length`). Si lo omites, el provisioning lo fija en `65536` (Hermes exige ≥ 64K).
+
+### Elegir provider
+
+El sandbox es **agnóstico**: defines provider, modelo y credencial en `.env`. Para cualquier provider, `base_url` va por `HERMES_CFG__model__base_url` (clave genérica de `config.yaml`) — **no** uses los `*_BASE_URL` específicos (`LM_BASE_URL`, etc.): son redundantes y atan la config a un provider.
+
+| Provider | `HERMES_CFG__model__provider` | API key | `base_url` default |
+|---|---|---|---|
+| LM Studio (local, gratis) | `lmstudio` | `HERMES_ENV__LM_API_KEY` (cualquier valor) | `http://127.0.0.1:1234/v1` |
+| Ollama (local, gratis) | `ollama` | — (ninguna) | `http://127.0.0.1:11434/v1` |
+| Claude / Anthropic | `anthropic` | `HERMES_ENV__ANTHROPIC_API_KEY` | `https://api.anthropic.com` |
+| OpenAI | `openai-api` ⚠️ | `HERMES_ENV__OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| MiniMax | `minimax` | `HERMES_ENV__MINIMAX_API_KEY` | `https://api.minimax.io/anthropic` |
+
+> ⚠️ **OpenAI:** `provider=openai` se rutea internamente a **OpenRouter**. Para usar OpenAI directo con tu key usa `provider=openai-api`.
+>
+> **Local:** desde el contenedor, `127.0.0.1` apunta al contenedor, no al host. Para LM Studio/Ollama corriendo en tu máquina usa la IP LAN (ej. `http://192.168.1.18:1234/v1`). El endpoint de LM Studio debe terminar en `/v1`.
+
+Ejemplo mínimo (`.env`) con LM Studio local. Ver [`.env.example`](./.env.example) para los 5 providers:
 
 ```dotenv
 # Webtop
@@ -32,17 +61,25 @@ TITLE=Hermes Agent
 CUSTOM_USER=tu_usuario
 PASSWORD=tu_password
 
-# Provisioning desatendido de Hermes
-HERMES_MODEL=google/gemma-4-e4b
-HERMES_PROVIDER=lmstudio
-HERMES_CONTEXT_LENGTH=65536
-LM_BASE_URL=http://127.0.0.1:1234/v1      # DEBE incluir /v1
-LM_API_KEY=lm-studio                          # LM Studio acepta cualquier valor
-TELEGRAM_BOT_TOKEN=123456:ABC...              # de @BotFather
-TELEGRAM_ALLOWED_USERS=                       # IDs separados por coma (opcional)
+# Provider (config.yaml — "__" = ".")
+HERMES_CFG__model__provider=lmstudio
+HERMES_CFG__model__default=google/gemma-4-e4b
+HERMES_CFG__model__base_url=http://127.0.0.1:1234/v1
+
+# Credencial (.env de Hermes)
+HERMES_ENV__LM_API_KEY=lm-studio                  # LM Studio acepta cualquier valor
+
+# Gateway Telegram (opcional)
+HERMES_ENV__TELEGRAM_BOT_TOKEN=123456:ABC...      # de @BotFather
+HERMES_ENV__TELEGRAM_ALLOWED_USERS=               # IDs separados por coma
+
+# Computer use (cua-driver) — control del escritorio. 1=on, 0=off
+HERMES_COMPUTER_USE=1
 ```
 
-> **Importante:** `LM_BASE_URL` **sobreescribe** `model.base_url` de `config.yaml` y debe terminar en `/v1` (el endpoint de LM Studio es `/v1/chat/completions`).
+### Computer use (control del escritorio)
+
+Con `HERMES_COMPUTER_USE=1`, el provisioning instala [`cua-driver`](https://github.com/trycua/cua) (open-source, gratuito, sin login Nous) que Hermes maneja por MCP. Controla el propio escritorio XFCE de webtop — que **sí** soporta computer use: usa X11 + AT-SPI + input XTest, todo dentro del contenedor, **sin permisos del host** (nada de `--privileged` ni `/dev/uinput`). Las dependencias (`at-spi2-core`, `libxtst6`, `dbus-x11`) ya van en la imagen.
 
 ## Uso
 
@@ -71,8 +108,10 @@ Vuelve a quedar 100% configurado sin intervención. Los permisos del bind mount 
 ```bash
 # edita .env, luego:
 docker exec hermes-webtop rm -f /config/.hermes/.setup-done
-docker compose up -d           # recrea el contenedor → el oneshot reaplica
+docker compose up -d --force-recreate   # contenedor fresco → el oneshot reaplica config.yaml/.env
 ```
+
+`--force-recreate` garantiza que el gateway arranque de nuevo y cargue la config recién aplicada. Si en cambio solo editaste valores en caliente (sin recrear), reinicia el gateway para que recargue: `docker exec hermes-webtop s6-svc -r /run/service/svc-hermes-gateway`.
 
 ## Gestión del gateway
 

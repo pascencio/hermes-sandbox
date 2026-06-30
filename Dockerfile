@@ -1,12 +1,15 @@
 FROM linuxserver/webtop:debian-xfce
 
-# Prerequisitos del sistema + navegador para Playwright/control web
+# Prerequisitos del sistema + navegador para Playwright/control web.
+# at-spi2-core/libatspi/libxtst/dbus-x11: stack de accesibilidad e input X11
+# (XTest) que cua-driver necesita para computer use dentro del XFCE de webtop.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl git xz-utils ca-certificates \
         build-essential g++ \
         ffmpeg ripgrep \
-        chromium && \
+        chromium \
+        at-spi2-core libatspi2.0-0 libxtst6 dbus-x11 && \
     rm -rf /var/lib/apt/lists/*
 
 # NO instalamos Hermes en build: /config es un bind mount que en runtime

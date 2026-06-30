@@ -19,6 +19,12 @@ done
 
 echo "[hermes-gateway] setup listo — arrancando gateway"
 cd "$HOME"
+# DISPLAY/XDG_RUNTIME_DIR: el gateway corre DETACHADO de la sesión gráfica XFCE.
+# Para que computer use (cua-driver) capture/inyecte, debe apuntar al display de
+# webtop (KasmVNC = :1 por defecto). Overridable vía .env (DISPLAY / XDG_RUNTIME_DIR).
 exec s6-setuidgid abc \
     env HOME=/config HERMES_GATEWAY_NO_SUPERVISE=1 \
+        DISPLAY="${DISPLAY:-:1}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}" \
+        CUA_DRIVER_RS_TELEMETRY_ENABLED=0 \
     "$HERMES" gateway run --no-supervise
